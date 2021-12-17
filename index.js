@@ -1,11 +1,8 @@
 import puppeteer from 'puppeteer'
-import { cleanupPage } from './helpers.js'
+import { cleanupPage, inlineStyles } from './helpers.js'
 import prettier from 'prettier'
 import { writeFile } from 'fs/promises'
 
-// TODO: programmatically loop through the links on the TOC page to export each
-// TODO: programmatically loop through the links on the TOC page to export each
-//  chapter.
 // TODO: rewrite all links to point to a section in the exported HTML document.
 // TODO: the final HTML page needs to be fully self-contained. Remove scripts,
 //  inline CSS, and inline images
@@ -22,20 +19,13 @@ await mainPage.goto(url, {
 });
 
 await cleanupPage(mainPage);
+await inlineStyles(mainPage);
 
-const mainElement = await mainPage.$("#main");
-
+// TODO: programmatically loop through the links on the TOC page to export each
+//  chapter.
 const pageUrls = await mainPage.$$eval("#page-content a", (anchorElements) =>
   anchorElements.map((anchorElement) => anchorElement.href)
 );
-
-await mainPage.evaluate((mainElement) => {
-  mainElement.style.width = "100%";
-  mainElement.style.float = "none";
-  mainElement.style.left = "0";
-}, mainElement);
-
-await mainPage.emulateMediaType("screen");
 
 const html = prettier.format(await mainPage.content(), {
   parser: "html",
