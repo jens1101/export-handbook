@@ -1,89 +1,46 @@
-import puppeteer from "puppeteer";
+import puppeteer from 'puppeteer'
+import { cleanupPage } from './helpers.js'
+import prettier from 'prettier'
+import { writeFile } from 'fs/promises'
+
+// TODO: programmatically loop through the links on the TOC page to export each
+// TODO: programmatically loop through the links on the TOC page to export each
+//  chapter.
+// TODO: rewrite all links to point to a section in the exported HTML document.
+// TODO: the final HTML page needs to be fully self-contained. Remove scripts,
+//  inline CSS, and inline images
+// TODO: clean up resulting HTML: remove duplicate IDs, clean up CSS, etc.
 
 const browser = await puppeteer.launch();
+const mainPage = await browser.newPage();
 
-const page = await browser.newPage();
-
-// TODO: figures don't load. They are a JS feature, so we will need to click on each figure, wait
-//  for the modal to load, and then extract it.
-// TODO: programmatically loop through the links on the TOC page to export each chapter.
-// TODO: rewrite all links to point to a section in the exported HTML document.
-
-// const url = 'https://www.suezwatertechnologies.com/handbook/handbook-industrial-water-treatment';
 const url =
-  "https://www.suezwatertechnologies.com/handbook/chapter-01-water-sources-impurities-and-chemistry";
+  "https://www.suezwatertechnologies.com/handbook/handbook-industrial-water-treatment";
 
-await page.goto(url, {
-  waitUntil: "networkidle0",
+await mainPage.goto(url, {
+  waitUntil: ["networkidle0", "domcontentloaded"],
 });
 
-await page.evaluate(() => {
-  document
-    .querySelectorAll(
-      `.top-bar-container,
-      #breadcum,
-      footer#main,
-      .bottom-bar,
-      .main-content > *:not(#main),
-      .handbook-pagination`
-    )
-    .forEach((el) => el.remove());
+await cleanupPage(mainPage);
 
-  const main = document.querySelector("#main");
-  main.style.width = "100%";
-  main.style.float = "none";
-  main.style.left = "0";
+const mainElement = await mainPage.$("#main");
 
-  const figureIds = [];
+const pageUrls = await mainPage.$$eval("#page-content a", (anchorElements) =>
+  anchorElements.map((anchorElement) => anchorElement.href)
+);
 
-  document.querySelectorAll(`a[data-open]`).forEach((anchorElement) => {
-    const figureId = anchorElement.dataset?.open;
+await mainPage.evaluate((mainElement) => {
+  mainElement.style.width = "100%";
+  mainElement.style.float = "none";
+  mainElement.style.left = "0";
+}, mainElement);
 
-    if (figureIds.includes(figureId)) {
-      anchorElement.href = `#${figureId}`;
-      return;
-    }
+await mainPage.emulateMediaType("screen");
 
-    const modalElement = document.getElementById(figureId);
-
-    if (!figureIds.includes(figureId)) {
-      figureIds.push(figureId);
-      anchorElement.href = `#${figureId}`;
-
-      const container = document.createElement("div");
-      container.id = figureId;
-
-      const title = document.createElement("h3");
-      title.textContent = modalElement.querySelector("header > h3").textContent;
-
-      const image = new Image();
-      image.src = modalElement.querySelector("img").src;
-
-      container.append(title, image);
-
-      main.append(container);
-    }
-  });
+const html = prettier.format(await mainPage.content(), {
+  parser: "html",
 });
 
-await page.emulateMediaType("screen");
-
-await page.pdf({
-  printBackground: true,
-  path: "webpage.pdf",
-  format: "A4",
-  margin: {
-    top: "20px",
-    bottom: "40px",
-    left: "20px",
-    right: "20px",
-  },
-});
-
-// const html = prettier.format(await page.content(), {
-//   parser: "html",
-// });
-//
-// await writeFile("index.html", html);
+await writeFile("index.html", html);
 
 await browser.close();
