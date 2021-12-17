@@ -1,4 +1,19 @@
 import fetch from "node-fetch";
+import { createWriteStream } from "fs";
+import { CSS_FILE_NAME, OUT_DIRECTORY, TITLE } from "./constants.js";
+import { join } from "path";
+import { readdir, rm } from "fs/promises";
+
+export async function cleanUpOutDirectory() {
+  const fileNames = await readdir(OUT_DIRECTORY);
+  const filePaths = fileNames
+    .filter((fileName) => fileName !== ".keep")
+    .map((fileName) => join(OUT_DIRECTORY, fileName));
+
+  for (const filePath of filePaths) {
+    await rm(filePath, { recursive: true });
+  }
+}
 
 export async function cleanupPage(page) {
   await page.evaluate(() => {
@@ -32,34 +47,39 @@ export async function cleanupPage(page) {
 }
 
 export async function inlineStyles(page) {
-  const styles = await page.$$eval(
+  const cssFileUrls = await page.$$eval(
     'link[rel="stylesheet"]',
-    async (linkElements) => {
-      const styles = [];
-
-      for (const linkElement of linkElements) {
-        const response = await fetch(linkElement.href);
-        const styleText = await response.text();
-        styles.push(styleText);
-      }
-
-      return styles;
-    }
+    (linkElements) => linkElements.map((linkElement) => linkElement.href)
   );
 
-  await page.evaluate((styles) => {
-    const titleElement = document.createElement("title");
-    // TODO: magic constant
-    titleElement.textContent = "Handbook of Industrial Water Treatment";
+  for (const cssFileUrl of cssFileUrls) {
+    const res = await fetch(cssFileUrl);
 
-    const styleElements = styles.map((styleText) => {
-      const styleElement = document.createElement("style");
-      styleElement.textContent = styleText;
-      return styleElement;
+    const fileStream = createWriteStream(join(OUT_DIRECTORY, CSS_FILE_NAME), {
+      flags: "a",
     });
 
-    document.head.replaceChildren(titleElement, ...styleElements);
-  }, styles);
+    await new Promise((resolve, reject) => {
+      res.body.pipe(fileStream);
+      res.body.on("error", reject);
+      fileStream.on("finish", resolve);
+    });
+  }
+
+  await page.evaluate(
+    (stylesheetUrl, titleText) => {
+      const titleElement = document.createElement("title");
+      titleElement.textContent = titleText;
+
+      const linkElement = document.createElement("link");
+      linkElement.rel = "stylesheet";
+      linkElement.href = stylesheetUrl;
+
+      document.head.replaceChildren(titleElement, linkElement);
+    },
+    CSS_FILE_NAME,
+    TITLE
+  );
 }
 
 export async function getPageContent(page) {

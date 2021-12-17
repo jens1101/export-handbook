@@ -1,12 +1,21 @@
 import puppeteer from "puppeteer";
-import { cleanupPage, getPageFigures, inlineStyles } from "./helpers.js";
+import {
+  cleanUpOutDirectory,
+  cleanupPage,
+  getPageFigures,
+  inlineStyles,
+} from "./helpers.js";
 import prettier from "prettier";
 import { writeFile } from "fs/promises";
+import { join } from "path";
+import { OUT_DIRECTORY } from "./constants.js";
 
 // TODO: rewrite all links to point to a section in the exported HTML document.
 // TODO: fetch remote resources, place them in the "out" folder, and update all
 //  references to them
 // TODO: clean up resulting HTML: remove duplicate IDs, clean up CSS, etc.
+
+await cleanUpOutDirectory();
 
 const browser = await puppeteer.launch();
 const mainPage = await browser.newPage();
@@ -83,6 +92,6 @@ const html = prettier.format(await mainPage.content(), {
   parser: "html",
 });
 
-await writeFile("out/index.html", html);
+await writeFile(join(OUT_DIRECTORY, "index.html"), html);
 
 await browser.close();
