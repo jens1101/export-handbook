@@ -10,7 +10,7 @@ export async function cleanupPage(page) {
         footer#main,
         .bottom-bar,
         .main-content > *:not(#main),
-        #page-content nav,
+        .handbook-pagination,
         script,
         noscript,
         iframe`
@@ -21,6 +21,11 @@ export async function cleanupPage(page) {
     mainElement.style.width = "100%";
     mainElement.style.float = "none";
     mainElement.style.left = "0";
+
+    const handbookLinks = document.querySelector(".handbook-links");
+    if (handbookLinks) {
+      handbookLinks.style.display = "block";
+    }
 
     document.documentElement.classList.remove("js", "async-hide");
   });
@@ -57,36 +62,46 @@ export async function inlineStyles(page) {
   }, styles);
 }
 
+export async function getPageContent(page) {
+  return (
+    await page.$$eval("#page-content-top, #content-wrapper", (elements) =>
+      elements.map((element) => element.innerHTML)
+    )
+  ).join("\n");
+}
+
+/**
+ *
+ * @param page
+ * @return {Promise<Map<string, {id, html}>>}
+ */
 export async function getPageFigures(page) {
-  const figureMap = new Map();
+  const figuresArray = await page.evaluate(() => {
+    const anchorElements = document.querySelectorAll("a[data-open]");
 
-  await page.$$eval("a[data-open]", async (anchorElement) => {
-    const figureId = anchorElement.dataset?.open;
+    const figures = new Map();
 
-    anchorElement.href = `#${figureId}`;
+    for (const anchorElement of anchorElements) {
+      const figureId = anchorElement.dataset?.open;
 
-    if (figureMap.has(figureId)) {
-      return;
+      anchorElement.href = `#${figureId}`;
+
+      if (figures.has(figureId)) {
+        continue;
+      }
+
+      const modalElement = document.getElementById(figureId);
+
+      modalElement.querySelector("header > button").remove();
+
+      figures.set(figureId, {
+        id: figureId,
+        html: modalElement.innerHTML,
+      });
     }
 
-    const modalElement = await anchorElement.$(figureId);
-
-    const title = await modalElement.$eval(
-      "header > h3",
-      (h3Element) => h3Element.textContent
-    );
-
-    const src = await modalElement.$eval(
-      "img",
-      (imageElement) => imageElement.src
-    );
-
-    figureMap.set(figureId, {
-      id: figureId,
-      title,
-      src,
-    });
+    return Array.from(figures.entries());
   });
 
-  return figureMap;
+  return new Map(figuresArray);
 }

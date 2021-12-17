@@ -76,5 +76,5 @@ typings/
 .fusebox/
 
 # Other
-webpage.pdf
-index.html
+out/*
+!.keep
