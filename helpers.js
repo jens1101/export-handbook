@@ -1,8 +1,13 @@
 import fetch from "node-fetch";
 import { createWriteStream } from "fs";
-import { CSS_FILE_NAME, OUT_DIRECTORY, TITLE } from "./constants.js";
-import { join } from "path";
-import { readdir, rm } from "fs/promises";
+import {
+  ASSETS_DIRECTORY,
+  CSS_FILE_NAME,
+  OUT_DIRECTORY,
+  TITLE,
+} from "./constants.js";
+import { basename, join, relative } from "path";
+import { mkdir, readdir, rm } from "fs/promises";
 
 export async function cleanUpOutDirectory() {
   const fileNames = await readdir(OUT_DIRECTORY);
@@ -46,23 +51,18 @@ export async function cleanupPage(page) {
   });
 }
 
-export async function inlineStyles(page) {
+export async function localiseStyleSheets(page) {
   const cssFileUrls = await page.$$eval(
     'link[rel="stylesheet"]',
     (linkElements) => linkElements.map((linkElement) => linkElement.href)
   );
 
   for (const cssFileUrl of cssFileUrls) {
-    const res = await fetch(cssFileUrl);
-
-    const fileStream = createWriteStream(join(OUT_DIRECTORY, CSS_FILE_NAME), {
-      flags: "a",
-    });
-
-    await new Promise((resolve, reject) => {
-      res.body.pipe(fileStream);
-      res.body.on("error", reject);
-      fileStream.on("finish", resolve);
+    await downloadFile(cssFileUrl, {
+      fileName: CSS_FILE_NAME,
+      writeStreamOptions: {
+        flags: "a",
+      },
     });
   }
 
@@ -80,6 +80,37 @@ export async function inlineStyles(page) {
     CSS_FILE_NAME,
     TITLE
   );
+}
+
+export async function localiseImages(page) {
+  const imageElements = await page.$$("img");
+  const imageMap = new Map();
+
+  for (const imageElement of imageElements) {
+    imageMap.set(
+      imageElement,
+      await page.evaluate((imageElement) => imageElement.src, imageElement)
+    );
+  }
+
+  await mkdir(ASSETS_DIRECTORY, { recursive: true });
+
+  for (const [imageElement, imageUrl] of imageMap) {
+    const imagePath = relative(
+      OUT_DIRECTORY,
+      await downloadFile(imageUrl, {
+        directory: ASSETS_DIRECTORY,
+      })
+    );
+
+    await page.evaluate(
+      (imageElement, imagePath) => {
+        imageElement.src = imagePath;
+      },
+      imageElement,
+      imagePath
+    );
+  }
 }
 
 export async function getPageContent(page) {
@@ -140,4 +171,26 @@ export async function getPageFigures(page) {
   });
 
   return new Map(figuresArray);
+}
+
+async function downloadFile(
+  url,
+  {
+    directory = OUT_DIRECTORY,
+    fileName = basename(url),
+    writeStreamOptions,
+  } = {}
+) {
+  const response = await fetch(url);
+
+  const targetPath = join(directory, fileName);
+  const fileStream = createWriteStream(targetPath, writeStreamOptions);
+
+  await new Promise((resolve, reject) => {
+    response.body.pipe(fileStream);
+    response.body.on("error", reject);
+    fileStream.on("finish", resolve);
+  });
+
+  return targetPath;
 }

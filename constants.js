@@ -9,3 +9,5 @@ export const OUT_DIRECTORY = join(
 export const CSS_FILE_NAME = "styles.css";
 
 export const TITLE = "Handbook of Industrial Water Treatment";
+
+export const ASSETS_DIRECTORY = join(OUT_DIRECTORY, "assets");

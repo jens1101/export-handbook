@@ -3,7 +3,8 @@ import {
   cleanUpOutDirectory,
   cleanupPage,
   getPageFigures,
-  inlineStyles,
+  localiseImages,
+  localiseStyleSheets,
 } from "./helpers.js";
 import prettier from "prettier";
 import { writeFile } from "fs/promises";
@@ -29,7 +30,7 @@ await mainPage.goto(
 
 await cleanupPage(mainPage);
 await mainPage.$eval("#page-content nav", (navElement) => navElement.remove());
-await inlineStyles(mainPage);
+await localiseStyleSheets(mainPage);
 
 const pageUrls = await mainPage.$$eval("#page-content a", (anchorElements) =>
   anchorElements.map((anchorElement) => anchorElement.href)
@@ -135,6 +136,8 @@ await mainPage.evaluate(
   pagesHtml,
   Array.from(figures.values())
 );
+
+await localiseImages(mainPage);
 
 const html = prettier.format(await mainPage.content(), {
   parser: "html",
