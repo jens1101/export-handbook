@@ -61,28 +61,76 @@ for (const pageUrl of pageUrls) {
 
 await mainPage.evaluate(
   (pagesHtml, figures) => {
-    const fragment = document.createDocumentFragment();
+    const chaptersAndFiguresFragment = document.createDocumentFragment();
 
     for (const pageHtml of pagesHtml) {
       // TODO: add page break after each chapter
       const pageContainer = document.createElement("div");
       pageContainer.insertAdjacentHTML("beforeend", pageHtml);
-      fragment.appendChild(pageContainer);
+      chaptersAndFiguresFragment.appendChild(pageContainer);
     }
 
     const figuresContainer = document.createElement("div");
+
+    figuresContainer.insertAdjacentHTML(
+      "beforeend",
+      `<section id="page-content-top">
+        <div class="row">
+          <div class="large-12 columns">
+            <div>
+              <section
+                id="block-ge-water-page-title"
+                class="block-ge-water-page-title block block-core block-page-title-block"
+              >
+                <h1><span class="field-wrapper">Appendix 1: Figures</span></h1>
+              </section>
+            </div>
+          </div>
+        </div>
+      </section>
+      <div id="content-wrapper">
+        <div class="row main-content">
+          <main
+            id="main"
+            class="large-9 large-push-3 columns"
+            role="main"
+            style="width: 100%; float: none; left: 0px"
+          >
+            <section id="page-content">
+              <div>
+                <section
+                  id="block-ge-water-content"
+                  class="block-ge-water-content block block-system block-system-main-block"
+                >
+                  <article
+                    id="node-1250"
+                    role="article"
+                    about="/handbook/introduction"
+                  >
+                    <!-- Figure content here -->
+                  </article>
+                </section>
+              </div>
+            </section>
+          </main>
+        </div>
+      </div>`
+    );
+
+    const figuresFragment = document.createDocumentFragment();
 
     for (const { id, html } of figures) {
       const container = document.createElement("div");
       container.id = id;
       container.insertAdjacentHTML("beforeend", html);
 
-      figuresContainer.appendChild(container);
+      figuresFragment.appendChild(container);
     }
 
-    fragment.appendChild(figuresContainer);
+    figuresContainer.querySelector("article").replaceChildren(figuresFragment);
+    chaptersAndFiguresFragment.appendChild(figuresContainer);
 
-    document.body.appendChild(fragment);
+    document.body.appendChild(chaptersAndFiguresFragment);
   },
   pagesHtml,
   Array.from(figures.values())

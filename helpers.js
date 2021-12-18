@@ -112,11 +112,27 @@ export async function getPageFigures(page) {
 
       const modalElement = document.getElementById(figureId);
 
-      modalElement.querySelector("header > button").remove();
+      const title = modalElement.querySelector("header > h3").textContent;
+      const contentHtml =
+        modalElement.querySelector(".modal-wrapper").innerHTML;
+
+      const html = `
+        <div class="view-mode-full">
+          <div
+            class="field-wrapper body field field-node--body field-name-body field-type-text-with-summary field-label-hidden"
+          >
+            <div class="field-items">
+              <div class="field-item">
+                <h3>${title}</h3>
+                ${contentHtml}
+              </div>
+            </div>
+          </div>
+        </div>`;
 
       figures.set(figureId, {
         id: figureId,
-        html: modalElement.innerHTML,
+        html,
       });
     }
 
