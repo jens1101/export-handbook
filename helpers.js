@@ -113,12 +113,26 @@ export async function localiseImages(page) {
   }
 }
 
+export async function localiseAnchors(page, urlMap) {
+  await page.$$eval(
+    "a",
+    (anchorElements, urlMap) => {
+      urlMap = new Map(urlMap);
+
+      for (const anchorElement of anchorElements) {
+        if (urlMap.has(anchorElement.href)) {
+          anchorElement.href = urlMap.get(anchorElement.href);
+        }
+      }
+    },
+    Array.from(urlMap)
+  );
+}
+
 export async function getPageContent(page) {
-  return (
-    await page.$$eval("#page-content-top, #content-wrapper", (elements) =>
-      elements.map((element) => element.innerHTML)
-    )
-  ).join("\n");
+  return await page.$$eval("#page-content-top, #content-wrapper", (elements) =>
+    elements.map((element) => element.outerHTML).join("\n")
+  );
 }
 
 /**

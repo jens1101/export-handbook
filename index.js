@@ -2,7 +2,9 @@ import puppeteer from "puppeteer";
 import {
   cleanUpOutDirectory,
   cleanupPage,
+  getPageContent,
   getPageFigures,
+  localiseAnchors,
   localiseImages,
   localiseStyleSheets,
 } from "./helpers.js";
@@ -11,7 +13,6 @@ import { writeFile } from "fs/promises";
 import { join } from "path";
 import { OUT_DIRECTORY } from "./constants.js";
 
-// TODO: rewrite all links to point to a section in the exported HTML document.
 // TODO: fetch remote resources, place them in the "out" folder, and update all
 //  references to them
 // TODO: clean up resulting HTML: remove duplicate IDs, clean up CSS, etc.
@@ -32,14 +33,27 @@ await cleanupPage(mainPage);
 await mainPage.$eval("#page-content nav", (navElement) => navElement.remove());
 await localiseStyleSheets(mainPage);
 
-const pageUrls = await mainPage.$$eval("#page-content a", (anchorElements) =>
-  anchorElements.map((anchorElement) => anchorElement.href)
-);
+const anchorElements = await mainPage.$$("#page-content a");
+const anchorMap = new Map();
 
-const pagesHtml = [];
+for (const anchorElement of anchorElements) {
+  anchorMap.set(
+    anchorElement,
+    await mainPage.evaluate(
+      (anchorElement) => ({
+        pageUrl: anchorElement.href,
+        title: anchorElement.innerText,
+        pageId: encodeURIComponent(anchorElement.innerText),
+      }),
+      anchorElement
+    )
+  );
+}
+
+const pagesMap = new Map();
 const figures = new Map();
 
-for (const pageUrl of pageUrls) {
+for (const { pageUrl, pageId } of anchorMap.values()) {
   const page = await browser.newPage();
 
   await page.goto(pageUrl, {
@@ -53,20 +67,17 @@ for (const pageUrl of pageUrls) {
     !figures.has(key) && figures.set(key, value);
   }
 
-  pagesHtml.push(
-    await page.$$eval("#page-content-top, #content-wrapper", (elements) =>
-      elements.map((element) => element.outerHTML).join("\n")
-    )
-  );
+  pagesMap.set(pageId, await getPageContent(page));
 }
 
 await mainPage.evaluate(
-  (pagesHtml, figures) => {
+  (pagesMap, figures) => {
     const chaptersAndFiguresFragment = document.createDocumentFragment();
 
-    for (const pageHtml of pagesHtml) {
+    for (const [pageId, pageHtml] of pagesMap) {
       // TODO: add page break after each chapter
       const pageContainer = document.createElement("div");
+      pageContainer.id = pageId;
       pageContainer.insertAdjacentHTML("beforeend", pageHtml);
       chaptersAndFiguresFragment.appendChild(pageContainer);
     }
@@ -133,11 +144,21 @@ await mainPage.evaluate(
 
     document.body.appendChild(chaptersAndFiguresFragment);
   },
-  pagesHtml,
+  Array.from(pagesMap),
   Array.from(figures.values())
 );
 
 await localiseImages(mainPage);
+
+await localiseAnchors(
+  mainPage,
+  new Map(
+    Array.from(anchorMap.values()).map((value) => [
+      value.pageUrl,
+      `#${value.pageId}`,
+    ])
+  )
+);
 
 const html = prettier.format(await mainPage.content(), {
   parser: "html",
