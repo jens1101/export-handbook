@@ -16,3 +16,10 @@ export const CSS_ASSETS_DIRECTORY = join(OUT_DIRECTORY, "css-assets");
 
 export const CSS_EXTRACT_URL_REGEX =
   /url\(\s*(?!['"]?data:|['"]?\/\/)['"]?([^()]+?)['"]?\)/;
+
+export const PAGE_MARGINS = {
+  top: "25mm",
+  bottom: "25mm",
+  left: "25mm",
+  right: "25mm",
+};

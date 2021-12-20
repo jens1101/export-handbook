@@ -30,6 +30,7 @@ export async function cleanupPage(page) {
         `.top-bar-container,
         .skip-link,
         #breadcum,
+        #onetrust-consent-sdk,
         footer#main,
         .bottom-bar,
         .main-content > *:not(#main),
@@ -51,6 +52,7 @@ export async function cleanupPage(page) {
     }
 
     document.documentElement.classList.remove("js", "async-hide");
+    document.body.style.background = "#ffffff";
   });
 }
 
@@ -149,6 +151,7 @@ export async function localiseImages(page) {
     await page.evaluate(
       (imageElement, imagePath) => {
         imageElement.src = imagePath;
+        imageElement.removeAttribute("loading");
       },
       imageElement,
       imagePath

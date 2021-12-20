@@ -11,16 +11,28 @@ import {
 import prettier from "prettier";
 import { writeFile } from "fs/promises";
 import { join } from "path";
-import { OUT_DIRECTORY } from "./constants.js";
-
-// TODO: fetch remote resources, place them in the "out" folder, and update all
-//  references to them
-// TODO: clean up resulting HTML: remove duplicate IDs, clean up CSS, etc.
+import { OUT_DIRECTORY, PAGE_MARGINS } from "./constants.js";
 
 await cleanUpOutDirectory();
 
 const browser = await puppeteer.launch();
 const mainPage = await browser.newPage();
+
+await mainPage.setRequestInterception(true);
+
+const rejectRequestPatterns = [
+  /myfonts\.net/i,
+  /bali6nora\.com/i,
+  /addtoany\.com/i,
+  /mpeasylink\.com/i,
+  /googletagmanager\.com/i,
+];
+
+mainPage.on("request", (request) => {
+  rejectRequestPatterns.find((pattern) => request.url().match(pattern))
+    ? request.abort()
+    : request.continue();
+});
 
 await mainPage.goto(
   "https://www.suezwatertechnologies.com/handbook/handbook-industrial-water-treatment",
@@ -50,7 +62,13 @@ for (const anchorElement of anchorElements) {
   );
 }
 
-const pagesMap = new Map();
+const pagesMap = new Map([
+  [
+    encodeURIComponent("Handbook of Industrial Water Treatment"),
+    await getPageContent(mainPage),
+  ],
+]);
+
 const figures = new Map();
 
 for (const { pageUrl, pageId } of anchorMap.values()) {
@@ -75,9 +93,9 @@ await mainPage.evaluate(
     const chaptersAndFiguresFragment = document.createDocumentFragment();
 
     for (const [pageId, pageHtml] of pagesMap) {
-      // TODO: add page break after each chapter
       const pageContainer = document.createElement("div");
       pageContainer.id = pageId;
+      pageContainer.style.pageBreakAfter = "always";
       pageContainer.insertAdjacentHTML("beforeend", pageHtml);
       chaptersAndFiguresFragment.appendChild(pageContainer);
     }
@@ -106,7 +124,7 @@ await mainPage.evaluate(
             id="main"
             class="large-9 large-push-3 columns"
             role="main"
-            style="width: 100%; float: none; left: 0px"
+            style="width: 100%; float: none; left: 0"
           >
             <section id="page-content">
               <div>
@@ -142,7 +160,7 @@ await mainPage.evaluate(
     figuresContainer.querySelector("article").replaceChildren(figuresFragment);
     chaptersAndFiguresFragment.appendChild(figuresContainer);
 
-    document.body.appendChild(chaptersAndFiguresFragment);
+    document.body.replaceChildren(chaptersAndFiguresFragment);
   },
   Array.from(pagesMap),
   Array.from(figures.values())
@@ -165,5 +183,20 @@ const html = prettier.format(await mainPage.content(), {
 });
 
 await writeFile(join(OUT_DIRECTORY, "index.html"), html);
+
+const finalHandbookPage = await browser.newPage();
+await finalHandbookPage.setJavaScriptEnabled(false);
+await finalHandbookPage.emulateMediaType("screen");
+
+await finalHandbookPage.goto(`file://${join(OUT_DIRECTORY, "index.html")}`, {
+  waitUntil: ["networkidle0", "domcontentloaded"],
+});
+
+await finalHandbookPage.pdf({
+  printBackground: true,
+  path: join(OUT_DIRECTORY, "Handbook of Industrial Water Treatment.pdf"),
+  format: "A4",
+  margin: PAGE_MARGINS,
+});
 
 await browser.close();
