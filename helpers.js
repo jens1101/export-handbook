@@ -2,12 +2,15 @@ import fetch from "node-fetch";
 import { createWriteStream } from "fs";
 import {
   ASSETS_DIRECTORY,
+  CSS_ASSETS_DIRECTORY,
+  CSS_EXTRACT_URL_REGEX,
   CSS_FILE_NAME,
   OUT_DIRECTORY,
   TITLE,
 } from "./constants.js";
-import { basename, join, relative } from "path";
-import { mkdir, readdir, rm } from "fs/promises";
+import { join, parse, relative } from "path";
+import { mkdir, readdir, rm, writeFile } from "fs/promises";
+import { createHash } from "crypto";
 
 export async function cleanUpOutDirectory() {
   const fileNames = await readdir(OUT_DIRECTORY);
@@ -52,18 +55,58 @@ export async function cleanupPage(page) {
 }
 
 export async function localiseStyleSheets(page) {
+  await mkdir(CSS_ASSETS_DIRECTORY, { recursive: true });
+
   const cssFileUrls = await page.$$eval(
     'link[rel="stylesheet"]',
     (linkElements) => linkElements.map((linkElement) => linkElement.href)
   );
 
+  const urlMap = new Map();
+
   for (const cssFileUrl of cssFileUrls) {
-    await downloadFile(cssFileUrl, {
-      fileName: CSS_FILE_NAME,
-      writeStreamOptions: {
-        flags: "a",
-      },
-    });
+    const response = await fetch(cssFileUrl);
+    let cssText = await response.text();
+
+    let currentMatch;
+    const allMatches = [];
+    const regex = new RegExp(CSS_EXTRACT_URL_REGEX, "dgm");
+
+    while (regex.global && (currentMatch = regex.exec(cssText))) {
+      const oldUrl = currentMatch[1];
+      const indices = currentMatch.indices[1];
+
+      if (!urlMap.has(oldUrl)) {
+        const absoluteUrl = await page.evaluate(
+          (url) => new URL(url, location.href).href,
+          oldUrl
+        );
+
+        const newUrl = relative(
+          OUT_DIRECTORY,
+          await downloadFile(absoluteUrl, {
+            directory: CSS_ASSETS_DIRECTORY,
+          })
+        );
+
+        urlMap.set(oldUrl, newUrl);
+      }
+
+      allMatches.unshift({
+        oldUrl,
+        newUrl: urlMap.get(oldUrl),
+        indices,
+      });
+    }
+
+    for (const {
+      newUrl,
+      indices: [startIndex, endIndex],
+    } of allMatches) {
+      cssText = cssText.slice(0, startIndex) + newUrl + cssText.slice(endIndex);
+    }
+
+    await writeFile(join(OUT_DIRECTORY, CSS_FILE_NAME), cssText, { flag: "a" });
   }
 
   await page.evaluate(
@@ -189,12 +232,14 @@ export async function getPageFigures(page) {
 
 async function downloadFile(
   url,
-  {
-    directory = OUT_DIRECTORY,
-    fileName = basename(url),
-    writeStreamOptions,
-  } = {}
+  { directory = OUT_DIRECTORY, fileName, writeStreamOptions } = {}
 ) {
+  fileName =
+    fileName ??
+    "" +
+      createHash("md5").update(url).digest("hex") +
+      parse(new URL(url).pathname).ext;
+
   const response = await fetch(url);
 
   const targetPath = join(directory, fileName);
